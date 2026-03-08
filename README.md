@@ -278,7 +278,3 @@ password: admin123
 
 MIT License
 
-```
-
-jo tumhare project ko **100x professional bana dega**.
-```
