@@ -48,14 +48,14 @@ The system is built with **modern backend observability and monitoring tools**.
 ```
 
 Frontend (React)
-│
-▼
+      │
+      ▼
 Backend API (Go)
-│
-┌──────┴──────┐
-▼             ▼
-Redis        PostgreSQL
-(cache)        (data)
+      │
+┌─────┴──────┐
+▼            ▼
+Redis      PostgreSQL
+(cache)      (data)
 
 ```
 
@@ -64,8 +64,8 @@ Monitoring Stack:
 ```
 
 OpenTelemetry
-│
-▼
+   │
+   ▼
 Jaeger (Tracing)
 
 Prometheus (Metrics)
