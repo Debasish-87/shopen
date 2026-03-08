@@ -12,6 +12,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
 
+	"github.com/shopen/backend/internal/cache"
 	"github.com/shopen/backend/internal/db"
 	"github.com/shopen/backend/internal/logger"
 	"github.com/shopen/backend/internal/models"
@@ -119,7 +120,9 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 // ListShops handles GET /api/shops
 // Query params: category, subcat, status (open|closed), search
 func (h *Handler) ListShops(w http.ResponseWriter, r *http.Request) {
+
 	q := r.URL.Query()
+
 	filter := models.ShopFilter{
 		Category: q.Get("category"),
 		Subcat:   q.Get("subcat"),
@@ -127,11 +130,47 @@ func (h *Handler) ListShops(w http.ResponseWriter, r *http.Request) {
 		Search:   q.Get("search"),
 	}
 
+	// cache key (include filters to avoid wrong cache)
+	cacheKey := "shops:list:" +
+		filter.Category + ":" +
+		filter.Subcat + ":" +
+		filter.Status + ":" +
+		filter.Search
+
+	// 1️⃣ Try Redis cache
+	val, err := cache.Client.Get(cache.Ctx, cacheKey).Result()
+
+	if err == nil {
+
+		var shops []models.Shop
+		json.Unmarshal([]byte(val), &shops)
+
+		logger.Log.Info("shops cache hit")
+
+		writeSuccess(w, http.StatusOK, shops, "cache hit")
+		return
+	}
+
+	// 2️⃣ Cache miss → query DB
 	shops, err := h.DB.ListShops(filter)
+
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch shops")
 		return
 	}
+
+	// 3️⃣ Store in Redis
+	jsonData, _ := json.Marshal(shops)
+
+	cache.Client.Set(
+		cache.Ctx,
+		cacheKey,
+		jsonData,
+		5*time.Minute,
+	)
+
+	logger.Log.Info("shops cache miss - loaded from db")
+
 	writeSuccess(w, http.StatusOK, shops, "")
 }
 
@@ -159,32 +198,40 @@ func (h *Handler) GetShop(w http.ResponseWriter, r *http.Request) {
 
 // CreateShop handles POST /api/admin/shops
 func (h *Handler) CreateShop(w http.ResponseWriter, r *http.Request) {
+
 	var req models.CreateShopRequest
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+
 	if req.Name == "" || req.Category == "" || req.Subcat == "" {
 		writeError(w, http.StatusBadRequest, "name, category, and subcat are required")
 		return
 	}
 
 	shop, err := h.DB.CreateShop(req)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to create shop")
-		return
-	}
-	writeSuccess(w, http.StatusCreated, shop, "shop created successfully")
 
-	logger.Log.Info("shop created",
-		zap.String("name", shop.Name),
-		zap.String("category", shop.Category),
-	)
 	if err != nil {
 		logger.Log.Error("failed to create shop",
 			zap.Error(err),
 		)
+
+		writeError(w, http.StatusInternalServerError, "failed to create shop")
+		return
 	}
+
+	// 🧠 Cache invalidation
+	cache.Client.Del(cache.Ctx, "shops:list")
+
+	logger.Log.Info("shop created",
+		zap.String("name", shop.Name),
+		zap.String("category", shop.Category),
+		zap.Int("id", shop.ID),
+	)
+
+	writeSuccess(w, http.StatusCreated, shop, "shop created successfully")
 }
 
 // UpdateShop handles PUT /api/admin/shops/{id}

@@ -1,19 +1,91 @@
-version: "3.9"
-
 services:
 
   prometheus:
-    image: prom/prometheus
-    container_name: prometheus
+    image: prom/prometheus:v2.52.0
+    container_name: shopen-prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
     ports:
       - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - shopen-monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:9090/-/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 
   grafana:
-    image: grafana/grafana
-    container_name: grafana
+    image: grafana/grafana:10.4.3
+    container_name: shopen-grafana
     ports:
       - "3001:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - shopen-monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+
+  redis:
+    image: redis:7.2
+    container_name: shopen-monitoring-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - shopen-monitoring
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.54
+    container_name: shopen-jaeger
+    ports:
+      - "16686:16686"   # UI
+      - "14268:14268"   # HTTP collector
+      - "6831:6831/udp" # UDP agent
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    restart: unless-stopped
+    networks:
+      - shopen-monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:16686"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+
+networks:
+  shopen-monitoring:
+    driver: bridge
+
+
+volumes:
+  grafana_data:
+  redis_data:
+  prometheus_data:

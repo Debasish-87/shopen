@@ -1,225 +1,196 @@
-# 🏪 Shopen — Full-Stack Shop Directory
+[![GitHub Workflow Status (branch)](https://img.shields.io/github/actions/workflow/status/golang-migrate/migrate/ci.yaml?branch=master)](https://github.com/golang-migrate/migrate/actions/workflows/ci.yaml?query=branch%3Amaster)
+[![GoDoc](https://pkg.go.dev/badge/github.com/golang-migrate/migrate)](https://pkg.go.dev/github.com/golang-migrate/migrate/v4)
+[![Coverage Status](https://img.shields.io/coveralls/github/golang-migrate/migrate/master.svg)](https://coveralls.io/github/golang-migrate/migrate?branch=master)
+[![packagecloud.io](https://img.shields.io/badge/deb-packagecloud.io-844fec.svg)](https://packagecloud.io/golang-migrate/migrate?filter=debs)
+[![Docker Pulls](https://img.shields.io/docker/pulls/migrate/migrate.svg)](https://hub.docker.com/r/migrate/migrate/)
+![Supported Go Versions](https://img.shields.io/badge/Go-1.24%2C%201.25-lightgrey.svg)
+[![GitHub Release](https://img.shields.io/github/release/golang-migrate/migrate.svg)](https://github.com/golang-migrate/migrate/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/golang-migrate/migrate/v4)](https://goreportcard.com/report/github.com/golang-migrate/migrate/v4)
 
-**React + TypeScript** frontend · **Go** backend · **PostgreSQL** database
+# migrate
 
----
+__Database migrations written in Go. Use as [CLI](#cli-usage) or import as [library](#use-in-your-go-project).__
 
-## 📁 Project Structure
+* Migrate reads migrations from [sources](#migration-sources)
+   and applies them in correct order to a [database](#databases).
+* Drivers are "dumb", migrate glues everything together and makes sure the logic is bulletproof.
+   (Keeps the drivers lightweight, too.)
+* Database drivers don't assume things or try to correct user input. When in doubt, fail.
 
-```
-shopen/
-├── backend/                  # Go API server
-│   ├── cmd/server/main.go    # Entry point + router
-│   ├── internal/
-│   │   ├── db/db.go          # PostgreSQL queries
-│   │   ├── handlers/         # HTTP handlers
-│   │   ├── middleware/        # JWT auth middleware
-│   │   └── models/           # Shared types
-│   ├── migrations/
-│   │   └── 001_initial_schema.sql
-│   ├── go.mod
-│   └── .env.example
-│
-└── frontend/                 # React + TypeScript
-    ├── src/
-    │   ├── api/client.ts     # Axios API client
-    │   ├── components/
-    │   │   ├── public/       # Public shop directory
-    │   │   ├── admin/        # Admin dashboard + forms
-    │   │   └── shared/       # Reusable UI components
-    │   ├── hooks/            # Zustand auth store
-    │   ├── lib/              # Constants & helpers
-    │   ├── styles/           # Global CSS
-    │   └── types/            # TypeScript interfaces
-    ├── package.json
-    └── vite.config.ts
-```
+Forked from [mattes/migrate](https://github.com/mattes/migrate)
 
----
+## Databases
 
-## 🚀 Quick Start
+Database drivers run migrations. [Add a new database?](database/driver.go)
 
-### 1. PostgreSQL Setup
+* [PostgreSQL](database/postgres)
+* [PGX v4](database/pgx)
+* [PGX v5](database/pgx/v5)
+* [Redshift](database/redshift)
+* [Ql](database/ql)
+* [Cassandra / ScyllaDB](database/cassandra)
+* [SQLite](database/sqlite)
+* [SQLite3](database/sqlite3) ([todo #165](https://github.com/mattes/migrate/issues/165))
+* [SQLCipher](database/sqlcipher)
+* [MySQL / MariaDB](database/mysql)
+* [Neo4j](database/neo4j)
+* [MongoDB](database/mongodb)
+* [CrateDB](database/crate) ([todo #170](https://github.com/mattes/migrate/issues/170))
+* [Shell](database/shell) ([todo #171](https://github.com/mattes/migrate/issues/171))
+* [Google Cloud Spanner](database/spanner)
+* [CockroachDB](database/cockroachdb)
+* [YugabyteDB](database/yugabytedb)
+* [ClickHouse](database/clickhouse)
+* [Firebird](database/firebird)
+* [MS SQL Server](database/sqlserver)
+* [rqlite](database/rqlite)
 
-```bash
-# Create the database
-psql -U postgres -c "CREATE DATABASE shopen;"
+### Database URLs
 
-# Run the migration
-psql -U postgres -d shopen -f backend/migrations/001_initial_schema.sql
-```
+Database connection strings are specified via URLs. The URL format is driver dependent but generally has the form: `dbdriver://username:password@host:port/dbname?param1=true&param2=false`
 
-### 2. Backend
+Any [reserved URL characters](https://en.wikipedia.org/wiki/Percent-encoding#Percent-encoding_reserved_characters) need to be escaped. Note, the `%` character also [needs to be escaped](https://en.wikipedia.org/wiki/Percent-encoding#Percent-encoding_the_percent_character)
 
-```bash
-cd backend
+Explicitly, the following characters need to be escaped:
+`!`, `#`, `$`, `%`, `&`, `'`, `(`, `)`, `*`, `+`, `,`, `/`, `:`, `;`, `=`, `?`, `@`, `[`, `]`
 
-# Copy and edit environment variables
-cp .env.example .env
-
-# Install dependencies
-go mod tidy
-
-# Run the server
-go run ./cmd/server/main.go
-# ✅ Server running at http://localhost:8080
-```
-
-### 3. Frontend
+It's easiest to always run the URL parts of your DB connection URL (e.g. username, password, etc) through an URL encoder. See the example Python snippets below:
 
 ```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start dev server (proxies /api to :8080)
-npm run dev
-# ✅ App running at http://localhost:5173
+$ python3 -c 'import urllib.parse; print(urllib.parse.quote(input("String to encode: "), ""))'
+String to encode: FAKEpassword!#$%&'()*+,/:;=?@[]
+FAKEpassword%21%23%24%25%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D
+$ python2 -c 'import urllib; print urllib.quote(raw_input("String to encode: "), "")'
+String to encode: FAKEpassword!#$%&'()*+,/:;=?@[]
+FAKEpassword%21%23%24%25%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D
+$
 ```
 
----
+## Migration Sources
 
-## 🔐 Admin Login
+Source drivers read migrations from local or remote sources. [Add a new source?](source/driver.go)
 
-| Field    | Value      |
-|----------|------------|
-| Username | `admin`    |
-| Password | `admin123` |
+* [Filesystem](source/file) - read from filesystem
+* [io/fs](source/iofs) - read from a Go [io/fs](https://pkg.go.dev/io/fs#FS)
+* [Go-Bindata](source/go_bindata) - read from embedded binary data ([jteeuwen/go-bindata](https://github.com/jteeuwen/go-bindata))
+* [pkger](source/pkger) - read from embedded binary data ([markbates/pkger](https://github.com/markbates/pkger))
+* [GitHub](source/github) - read from remote GitHub repositories
+* [GitHub Enterprise](source/github_ee) - read from remote GitHub Enterprise repositories
+* [Bitbucket](source/bitbucket) - read from remote Bitbucket repositories
+* [Gitlab](source/gitlab) - read from remote Gitlab repositories
+* [AWS S3](source/aws_s3) - read from Amazon Web Services S3
+* [Google Cloud Storage](source/google_cloud_storage) - read from Google Cloud Platform Storage
 
----
+## CLI usage
 
-## 🌐 API Reference
+* Simple wrapper around this library.
+* Handles ctrl+c (SIGINT) gracefully.
+* No config search paths, no config files, no magic ENV var injections.
 
-### Public Endpoints (no auth required)
+[CLI Documentation](cmd/migrate) (includes CLI install instructions)
 
-| Method | Path              | Description              |
-|--------|-------------------|--------------------------|
-| GET    | `/api/health`     | Health check             |
-| GET    | `/api/shops`      | List shops (filterable)  |
-| GET    | `/api/shops/:id`  | Get single shop          |
+### Basic usage
 
-#### Query Parameters for `/api/shops`
-- `category` — `Food` | `Medical` | `Café`
-- `subcat`   — sub-category string
-- `status`   — `open` | `closed`
-- `search`   — free-text search (name, address, subcat)
-
-### Auth
-
-| Method | Path               | Body                            |
-|--------|--------------------|---------------------------------|
-| POST   | `/api/auth/login`  | `{ username, password }`        |
-
-Returns `{ token, username }` — include token as `Authorization: Bearer <token>`.
-
-### Admin Endpoints (JWT required)
-
-| Method | Path                          | Description         |
-|--------|-------------------------------|---------------------|
-| GET    | `/api/admin/stats`            | Dashboard stats     |
-| GET    | `/api/admin/shops`            | All shops           |
-| POST   | `/api/admin/shops`            | Create shop         |
-| PUT    | `/api/admin/shops/:id`        | Update shop         |
-| DELETE | `/api/admin/shops/:id`        | Delete shop         |
-| PATCH  | `/api/admin/shops/:id/toggle` | Toggle open/closed  |
-
----
-
-## 🏗 Tech Stack
-
-| Layer    | Technology                          |
-|----------|-------------------------------------|
-| Frontend | React 18, TypeScript, Vite, Zustand |
-| Backend  | Go 1.22, Chi router                 |
-| Database | PostgreSQL 15+                      |
-| Auth     | JWT (HS256)                         |
-| API      | RESTful JSON                        |
-
----
-
-## ⚙️ Environment Variables
-
-```env
-# Server
-PORT=8080
-ENV=development
-
-# PostgreSQL
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=yourpassword
-DB_NAME=shopen
-DB_SSLMODE=disable
-
-# JWT
-JWT_SECRET=your-super-secret-key
-JWT_EXPIRY_HOURS=24
+```bash
+$ migrate -source file://path/to/migrations -database postgres://localhost:5432/database up 2
 ```
 
----
+### Docker usage
 
-## 🐳 Docker (Optional)
-
-```dockerfile
-# backend/Dockerfile
-FROM golang:1.22-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN go mod tidy && go build -o server ./cmd/server
-
-FROM alpine:latest
-WORKDIR /app
-COPY --from=builder /app/server .
-EXPOSE 8080
-CMD ["./server"]
+```bash
+$ docker run -v {{ migration dir }}:/migrations --network host migrate/migrate
+    -path=/migrations/ -database postgres://localhost:5432/database up 2
 ```
 
-```yaml
-# docker-compose.yml
-version: '3.9'
-services:
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: shopen
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: yourpassword
-    ports: ["5432:5432"]
+## Use in your Go project
 
-  backend:
-    build: ./backend
-    ports: ["8080:8080"]
-    environment:
-      DB_HOST: db
-      DB_PASSWORD: yourpassword
-    depends_on: [db]
+* API is stable and frozen for this release (v3 & v4).
+* Uses [Go modules](https://golang.org/cmd/go/#hdr-Modules__module_versions__and_more) to manage dependencies.
+* To help prevent database corruptions, it supports graceful stops via `GracefulStop chan bool`.
+* Bring your own logger.
+* Uses `io.Reader` streams internally for low memory overhead.
+* Thread-safe and no goroutine leaks.
 
-  frontend:
-    build: ./frontend
-    ports: ["5173:5173"]
-    depends_on: [backend]
+__[Go Documentation](https://pkg.go.dev/github.com/golang-migrate/migrate/v4)__
+
+```go
+import (
+    "github.com/golang-migrate/migrate/v4"
+    _ "github.com/golang-migrate/migrate/v4/database/postgres"
+    _ "github.com/golang-migrate/migrate/v4/source/github"
+)
+
+func main() {
+    m, err := migrate.New(
+        "github://mattes:personal-access-token@mattes/migrate_test",
+        "postgres://localhost:5432/database?sslmode=enable")
+    m.Steps(2)
+}
 ```
+
+Want to use an existing database client?
+
+```go
+import (
+    "database/sql"
+    _ "github.com/lib/pq"
+    "github.com/golang-migrate/migrate/v4"
+    "github.com/golang-migrate/migrate/v4/database/postgres"
+    _ "github.com/golang-migrate/migrate/v4/source/file"
+)
+
+func main() {
+    db, err := sql.Open("postgres", "postgres://localhost:5432/database?sslmode=enable")
+    driver, err := postgres.WithInstance(db, &postgres.Config{})
+    m, err := migrate.NewWithDatabaseInstance(
+        "file:///migrations",
+        "postgres", driver)
+    m.Up() // or m.Steps(2) if you want to explicitly set the number of migrations to run
+}
+```
+
+## Getting started
+
+Go to [getting started](GETTING_STARTED.md)
+
+## Tutorials
+
+* [CockroachDB](database/cockroachdb/TUTORIAL.md)
+* [PostgreSQL](database/postgres/TUTORIAL.md)
+
+(more tutorials to come)
+
+## Migration files
+
+Each migration has an up and down migration. [Why?](FAQ.md#why-two-separate-files-up-and-down-for-a-migration)
+
+```bash
+1481574547_create_users_table.up.sql
+1481574547_create_users_table.down.sql
+```
+
+[Best practices: How to write migrations.](MIGRATIONS.md)
+
+## Coming from another db migration tool?
+
+Check out [migradaptor](https://github.com/musinit/migradaptor/).
+*Note: migradaptor is not affiliated or supported by this project*
+
+## Versions
+
+Version | Supported? | Import | Notes
+--------|------------|--------|------
+**master** | :white_check_mark: | `import "github.com/golang-migrate/migrate/v4"` | New features and bug fixes arrive here first |
+**v4** | :white_check_mark: | `import "github.com/golang-migrate/migrate/v4"` | Used for stable releases |
+**v3** | :x: | `import "github.com/golang-migrate/migrate"` (with package manager) or `import "gopkg.in/golang-migrate/migrate.v3"` (not recommended) | **DO NOT USE** - No longer supported |
+
+## Development and Contributing
+
+Yes, please! [`Makefile`](Makefile) is your friend,
+read the [development guide](CONTRIBUTING.md).
+
+Also have a look at the [FAQ](FAQ.md).
 
 ---
 
-## ✨ Features
-
-### Public Site
-- 🔍 Full-text search across name, address, category
-- 🏷 Category filter: Food / Medical / Café
-- 🟢🔴 Open/Closed status filter (optional)
-- 🍽️ Sub-type pills (Restaurant, Pharmacy, Coffee…)
-- 🟢 Animated glow dot when open, static red when closed
-- 📋 Shop profile modal: photo, description, Google Maps embed
-- 🔁 Auto-refreshes every 10 seconds
-
-### Admin Dashboard
-- 🔐 JWT-authenticated login
-- 📊 Stats: total, open, closed, open rate
-- ➕ Add shop with full profile (name, photo, description, map query)
-- ✏️ Edit any shop field
-- 🗑 Delete shops with confirmation
-- 🔄 One-click status toggle per shop
-- 🔴🟢 Live preview in the form modal
+Looking for alternatives? [https://awesome-go.com/#database](https://awesome-go.com/#database).

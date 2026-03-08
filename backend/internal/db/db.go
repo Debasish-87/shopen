@@ -8,7 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/XSAM/otelsql"
 	_ "github.com/lib/pq"
+
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/shopen/backend/internal/models"
 )
@@ -20,6 +23,7 @@ type DB struct {
 
 // New opens a PostgreSQL connection and verifies it with a ping.
 func New() (*DB, error) {
+
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		getenv("DB_HOST", "localhost"),
@@ -30,7 +34,18 @@ func New() (*DB, error) {
 		getenv("DB_SSLMODE", "disable"),
 	)
 
-	conn, err := sql.Open("postgres", dsn)
+	driverName, err := otelsql.Register(
+		"postgres",
+		otelsql.WithAttributes(
+			attribute.String("db.system", "postgresql"),
+		),
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("register otel sql: %w", err)
+	}
+
+	conn, err := sql.Open(driverName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
@@ -44,6 +59,7 @@ func New() (*DB, error) {
 	}
 
 	log.Println("✅ Connected to PostgreSQL")
+
 	return &DB{conn: conn}, nil
 }
 
@@ -175,17 +191,61 @@ func (d *DB) UpdateShop(id int, req models.UpdateShopRequest) (*models.Shop, err
 	args := []interface{}{}
 	argIdx := 1
 
-	if req.Name != nil        { setClauses = append(setClauses, fmt.Sprintf("name=$%d", argIdx));        args = append(args, *req.Name);        argIdx++ }
-	if req.Category != nil    { setClauses = append(setClauses, fmt.Sprintf("category=$%d", argIdx));    args = append(args, *req.Category);    argIdx++ }
-	if req.Subcat != nil      { setClauses = append(setClauses, fmt.Sprintf("subcat=$%d", argIdx));      args = append(args, *req.Subcat);      argIdx++ }
-	if req.Icon != nil        { setClauses = append(setClauses, fmt.Sprintf("icon=$%d", argIdx));        args = append(args, *req.Icon);        argIdx++ }
-	if req.Address != nil     { setClauses = append(setClauses, fmt.Sprintf("address=$%d", argIdx));     args = append(args, *req.Address);     argIdx++ }
-	if req.Phone != nil       { setClauses = append(setClauses, fmt.Sprintf("phone=$%d", argIdx));       args = append(args, *req.Phone);       argIdx++ }
-	if req.Hours != nil       { setClauses = append(setClauses, fmt.Sprintf("hours=$%d", argIdx));       args = append(args, *req.Hours);       argIdx++ }
-	if req.IsOpen != nil      { setClauses = append(setClauses, fmt.Sprintf("is_open=$%d", argIdx));     args = append(args, *req.IsOpen);      argIdx++ }
-	if req.Description != nil { setClauses = append(setClauses, fmt.Sprintf("description=$%d", argIdx)); args = append(args, *req.Description); argIdx++ }
-	if req.PhotoURL != nil    { setClauses = append(setClauses, fmt.Sprintf("photo_url=$%d", argIdx));   args = append(args, *req.PhotoURL);    argIdx++ }
-	if req.MapQuery != nil    { setClauses = append(setClauses, fmt.Sprintf("map_query=$%d", argIdx));   args = append(args, *req.MapQuery);    argIdx++ }
+	if req.Name != nil {
+		setClauses = append(setClauses, fmt.Sprintf("name=$%d", argIdx))
+		args = append(args, *req.Name)
+		argIdx++
+	}
+	if req.Category != nil {
+		setClauses = append(setClauses, fmt.Sprintf("category=$%d", argIdx))
+		args = append(args, *req.Category)
+		argIdx++
+	}
+	if req.Subcat != nil {
+		setClauses = append(setClauses, fmt.Sprintf("subcat=$%d", argIdx))
+		args = append(args, *req.Subcat)
+		argIdx++
+	}
+	if req.Icon != nil {
+		setClauses = append(setClauses, fmt.Sprintf("icon=$%d", argIdx))
+		args = append(args, *req.Icon)
+		argIdx++
+	}
+	if req.Address != nil {
+		setClauses = append(setClauses, fmt.Sprintf("address=$%d", argIdx))
+		args = append(args, *req.Address)
+		argIdx++
+	}
+	if req.Phone != nil {
+		setClauses = append(setClauses, fmt.Sprintf("phone=$%d", argIdx))
+		args = append(args, *req.Phone)
+		argIdx++
+	}
+	if req.Hours != nil {
+		setClauses = append(setClauses, fmt.Sprintf("hours=$%d", argIdx))
+		args = append(args, *req.Hours)
+		argIdx++
+	}
+	if req.IsOpen != nil {
+		setClauses = append(setClauses, fmt.Sprintf("is_open=$%d", argIdx))
+		args = append(args, *req.IsOpen)
+		argIdx++
+	}
+	if req.Description != nil {
+		setClauses = append(setClauses, fmt.Sprintf("description=$%d", argIdx))
+		args = append(args, *req.Description)
+		argIdx++
+	}
+	if req.PhotoURL != nil {
+		setClauses = append(setClauses, fmt.Sprintf("photo_url=$%d", argIdx))
+		args = append(args, *req.PhotoURL)
+		argIdx++
+	}
+	if req.MapQuery != nil {
+		setClauses = append(setClauses, fmt.Sprintf("map_query=$%d", argIdx))
+		args = append(args, *req.MapQuery)
+		argIdx++
+	}
 
 	if len(setClauses) == 0 {
 		return d.GetShopByID(id)
